@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>小妲的贡奴飞机小游戏</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a1a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    overflow: hidden;
+    touch-action: none;
+  }
+  #gameContainer {
+    position: relative;
+    box-shadow: 0 0 30px rgba(0,150,255,0.4);
+    width: 400px;
+    height: 700px;
+  }
+  canvas {
+    display: block;
+    background: #000;
+    width: 100%;
+    height: 100%;
+  }
+  #ui {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    color: #fff;
+    font-size: 14px;
+    text-shadow: 0 0 6px #00f;
+    pointer-events: none;
+    line-height: 1.5;
+    z-index: 10;
+  }
+  #cheatBtn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 6px 12px;
+    font-size: 13px;
+    background: rgba(0,100,200,0.7);
+    border: 1px solid #4af;
+    color: #fff;
+    border-radius: 16px;
+    cursor: pointer;
+    z-index: 15;
+    pointer-events: auto;
+  }
+  #cheatBtn:hover { background: rgba(0,140,255,0.85); }
+  #cheatModal {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,20,0.92);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 30;
+  }
+  #cheatModal input {
+    margin: 12px 0;
+    padding: 10px 16px;
+    font-size: 16px;
+    width: 220px;
+    text-align: center;
+    border: 2px solid #4af;
+    border-radius: 8px;
+    background: #111;
+    color: #fff;
+    outline: none;
+  }
+  #cheatModal .modalBtns {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  #cheatModal button {
+    margin-top: 0;
+    padding: 8px 20px;
+    font-size: 14px;
+  }
+  #loadingScreen, #coverScreen, #startScreen, #gameOver, #stageClear, #disclaimer {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,15,0.95);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #fff;
+    text-align: center;
+    z-index: 25;
+    pointer-events: auto;
+  }
+  #stageClear {
+    z-index: 40;
+  }
+  /* 封面全屏铺满 */
+  #coverScreen {
+    background: #000;
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 50;
+  }
+  #coverScreen img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  #coverText {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 22px;
+    color: #ff9ec7;
+    text-shadow: 0 0 16px #f0a, 0 0 8px #000;
+    line-height: 1.6;
+    padding: 12px 20px;
+    background: rgba(0,0,0,0.45);
+    border-radius: 12px;
+    white-space: nowrap;
+    z-index: 2;
+  }
+  #coverHint {
+    position: absolute;
+    bottom: 40px;
+    left: 0;
+    right: 0;
+    font-size: 15px;
+    color: #ddd;
+    text-shadow: 0 0 8px #000;
+    animation: blink 1.4s infinite;
+    z-index: 2;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  h1 {
+    font-size: 26px;
+    margin-bottom: 12px;
+    color: #4af;
+    text-shadow: 0 0 15px #08f;
+  }
+  button {
+    margin-top: 20px;
+    padding: 12px 36px;
+    font-size: 16px;
+    background: linear-gradient(45deg, #06f, #0af);
+    border: none;
+    color: white;
+    border-radius: 30px;
+    cursor: pointer;
+    box-shadow: 0 0 15px #0af;
+  }
+  button:hover { transform: scale(1.05); }
+  .hidden { display: none !important; }
+  #loadProgress {
+    width: 70%;
+    height: 10px;
+    background: #222;
+    border-radius: 5px;
+    margin-top: 20px;
+    overflow: hidden;
+  }
+  #loadBar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #0af, #f0a);
+    transition: width 0.25s;
+  }
+  #disclaimer p {
+    font-size: 13px;
+    line-height: 1.75;
+    opacity: 0.88;
+    max-width: 86%;
+    margin: 7px 0;
+  }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="game" width="400" height="700"></canvas>
+
+  <div id="ui" class="hidden">
+    <div>关卡: <span id="stageNum">1</span> / 3</div>
+    <div>分数: <span id="score">0</span></div>
+    <div>生命: <span id="lives">5</span></div>
+    <div>火力: <span id="power">1</span></div>
+    <div id="cheatStatus" style="color:#0f8;margin-top:4px;"></div>
+  </div>
+
+  <!-- 秘籍按钮 -->
+  <button id="cheatBtn" class="hidden" onclick="openCheatModal()">秘籍</button>
+
+  <!-- 秘籍输入弹窗 -->
+  <div id="cheatModal" class="hidden">
+    <h1 style="font-size:20px;">输入秘籍</h1>
+    <input type="text" id="cheatInput" placeholder="请输入秘籍" maxlength="12" autocomplete="off">
+    <div class="modalBtns">
+      <button onclick="submitCheat()">确认</button>
+      <button onclick="closeCheatModal()" style="background:linear-gradient(45deg,#555,#777);">取消</button>
+    </div>
+  </div>
+
+  <!-- 加载界面 -->
+  <div id="loadingScreen">
+    <h1>加载中</h1>
+    <div id="loadProgress"><div id="loadBar"></div></div>
+  </div>
+
+  <!-- 封面（全屏） -->
+  <div id="coverScreen" class="hidden">
+    <img id="coverImg" src="https://files.catbox.moe/s1vuv5.png" alt="封面">
+    <div id="coverText">欢迎来到小妲的贡奴飞机小游戏～🖤</div>
+    <div id="coverHint">点击任意处继续</div>
+  </div>
+
+  <!-- 免责声明 -->
+  <div id="disclaimer" class="hidden">
+    <h1>免责声明</h1>
+    <p>本游戏仅供个人娱乐与学习交流使用。</p>
+    <p>游戏内所有角色、图片、文字、音效均为虚构内容，不代表任何现实立场或倾向。</p>
+    <p>请理性游戏，注意休息，勿沉迷。</p>
+    <p>继续即表示您已阅读并同意以上内容。</p>
+    <button onclick="acceptDisclaimer()">我已了解，继续</button>
+  </div>
+
+  <!-- 开始界面 -->
+  <div id="startScreen" class="hidden">
+    <h1>小妲的贡奴飞机</h1>
+    <p style="margin-top:10px;font-size:14px;opacity:0.85;line-height:1.7">
+      鼠标 / 手指滑动控制<br>
+      自动射击 · 躲避弹幕<br>
+      收集「傻逼」提升火力 · 「白痴」回血
+    </p>
+    <button onclick="startGame()">开始战斗</button>
+  </div>
+
+  <div id="stageClear" class="hidden" onclick="nextStage()">
+    <h1>关卡通过！</h1>
+    <p id="stageClearText">准备下一关...</p>
+    <button onclick="event.stopPropagation(); nextStage();">进入下一关</button>
+    <p style="margin-top:16px;font-size:13px;opacity:0.7;">点击屏幕任意处也可继续</p>
+  </div>
+
+  <div id="gameOver" class="hidden">
+    <h1 id="endTitle">任务结束</h1>
+    <p style="font-size:17px;margin-top:8px">最终分数: <span id="finalScore">0</span></p>
+    <button onclick="startGame()">重新出击</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width;
+const H = canvas.height;
+
+// ========== 资源 ==========
+const imgPlayer = new Image();
+const imgBullet = new Image();
+const imgBoss1 = new Image();
+const imgBoss2 = new Image();
+const imgBoss3 = new Image();
+const imgCover = new Image();
+
+imgPlayer.src = 'https://files.catbox.moe/s54oga.png';
+imgBullet.src = 'https://files.catbox.moe/rpjmln.png';
+imgBoss1.src  = 'https://files.catbox.moe/sk7bmd.png';
+imgBoss2.src  = 'https://files.catbox.moe/36gtxp.png';
+imgBoss3.src  = 'https://files.catbox.moe/uxqksh.png';
+imgCover.src  = 'https://files.catbox.moe/s1vuv5.png';
+
+// 预缩放后的高质量位图（保持显示大小，画质最高）
+let scaledPlayer = null;
+let scaledBullet = null;
+let scaledBoss1 = null;
+let scaledBoss2 = null;
+let scaledBoss3 = null;
+
+function createHighQualityScaled(img, targetW, targetH) {
+  if (!img.complete || img.naturalWidth === 0) return null;
+  const off = document.createElement('canvas');
+  off.width = targetW;
+  off.height = targetH;
+  const octx = off.getContext('2d');
+  octx.imageSmoothingEnabled = true;
+  if (octx.imageSmoothingQuality !== undefined) {
+    octx.imageSmoothingQuality = 'high';
+  }
+  octx.drawImage(img, 0, 0, targetW, targetH);
+  return off;
+}
+
+function prepareScaledImages() {
+  // 玩家尺寸与代码中一致
+  scaledPlayer = createHighQualityScaled(imgPlayer, 56, 70);
+  // 子弹
+  scaledBullet = createHighQualityScaled(imgBullet, 24, 32);
+  // BOSS 尺寸
+  scaledBoss1 = createHighQualityScaled(imgBoss1, 110, 140);
+  scaledBoss2 = createHighQualityScaled(imgBoss2, 115, 145);
+  scaledBoss3 = createHighQualityScaled(imgBoss3, 120, 150);
+}
+
+const bgm = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3');
+bgm.loop = true;
+bgm.volume = 0.35;
+
+const sfxShoot   = new Audio('https://actions.google.com/sounds/v1/science_fiction/laser_gun.ogg');
+const sfxHit     = new Audio('https://actions.google.com/sounds/v1/impacts/crash_wood_and_glass.ogg');
+const sfxExplode = new Audio('https://actions.google.com/sounds/v1/explosions/explosion_1.ogg');
+const sfxPower   = new Audio('https://actions.google.com/sounds/v1/cartoon/pop.ogg');
+const sfxClear   = new Audio('https://actions.google.com/sounds/v1/cartoon/congrats.ogg');
+const sfxCheat   = new Audio('https://actions.google.com/sounds/v1/cartoon/pop.ogg');
+
+sfxShoot.volume = 0.22;
+sfxHit.volume = 0.4;
+sfxExplode.volume = 0.5;
+sfxPower.volume = 0.45;
+sfxClear.volume = 0.5;
+sfxCheat.volume = 0.6;
+
+function playSfx(audio) {
+  try {
+    const a = audio.cloneNode();
+    a.volume = audio.volume;
+    a.play().catch(()=>{});
+  } catch(e) {}
+}
+
+// ========== 秘籍（8位随机，游戏内完全无提示） ==========
+// 密码只有你知道，请自己保管
+const CHEATS = {
+  1: 'K7M2P9X4',
+  2: 'Q3R8T1W6',
+  3: 'Z5N0Y7V2'
+};
+let usedCheat = {1: false, 2: false, 3: false};
+let keyBuffer = '';
+let cheatInvuln = 0;
+let cheatFireBoost = 0;
+
+// ========== 游戏状态 ==========
+let score = 0, lives = 5, power = 1;
+let gameRunning = false;
+let frame = 0;
+let stage = 1;
+let boss = null;
+let waitingNext = false;
+let paused = false;          // 秘籍弹窗时暂停
+let powerupTimer = 0;
+
+const player = { x: W/2, y: H - 90, w: 56, h: 70, invincible: 0 };
+let bullets = [], eBullets = [], powerups = [], particles = [], stars = [];
+
+for (let i = 0; i < 90; i++) {
+  stars.push({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    s: Math.random() * 2 + 0.4,
+    speed: Math.random() * 1.6 + 0.4
+  });
+}
+
+// ========== 输入 ==========
+let mouseX = W/2, mouseY = H - 90;
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = (e.clientX - rect.left) * (W / rect.width);
+  mouseY = (e.clientY - rect.top) * (H / rect.height);
+});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const t = e.touches[0];
+  mouseX = (t.clientX - rect.left) * (W / rect.width);
+  mouseY = (t.clientY - rect.top) * (H / rect.height);
+}, {passive: false});
+canvas.addEventListener('touchstart', e => e.preventDefault(), {passive: false});
+
+window.addEventListener('keydown', e => {
+  if (!gameRunning || waitingNext || paused) return;
+  const key = e.key.toUpperCase();
+  if (key.length === 1 && /[A-Z0-9]/.test(key)) {
+    keyBuffer += key;
+    if (keyBuffer.length > 12) keyBuffer = keyBuffer.slice(-12);
+    const code = CHEATS[stage];
+    if (keyBuffer.endsWith(code) && !usedCheat[stage]) {
+      usedCheat[stage] = true;
+      cheatInvuln = 3600;
+      cheatFireBoost = 3600;
+      keyBuffer = '';
+      playSfx(sfxCheat);
+      addParticles(player.x + player.w/2, player.y + player.h/2, '#0ff', 35);
+    }
+  }
+});
+
+// ========== 工具 ==========
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function rectHit(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function spawnBoss(stageNum) {
+  const configs = {
+    1: { img: imgBoss1, hp: 110, w: 110, h: 140, score: 3000, name: '第一关 BOSS',
+         baseShoot: 32, moveSpeed: 1.1, spread: 2, bulletSpeed: 2.4 },
+    2: { img: imgBoss2, hp: 200, w: 115, h: 145, score: 5000, name: '第二关 BOSS',
+         baseShoot: 22, moveSpeed: 1.6, spread: 3, bulletSpeed: 3.0 },
+    3: { img: imgBoss3, hp: 480, w: 120, h: 150, score: 8000, name: '最终 BOSS',
+         baseShoot: 12, moveSpeed: 2.1, spread: 4, bulletSpeed: 3.6 }
+  };
+  const c = configs[stageNum];
+  boss = {
+    x: W/2 - c.w/2, y: -c.h, w: c.w, h: c.h,
+    hp: c.hp, maxHp: c.hp, img: c.img, score: c.score, name: c.name,
+    dir: 1, phase: 0, shootTimer: c.baseShoot,
+    baseShoot: c.baseShoot, moveSpeed: c.moveSpeed,
+    spread: c.spread, bulletSpeed: c.bulletSpeed, entered: false
+  };
+}
+
+function spawnPowerupRandom() {
+  powerups.push({
+    x: 30 + Math.random() * (W - 60),
+    y: -30,
+    w: 36, h: 22,
+    type: Math.random() < 0.55 ? 0 : 1,
+    speed: 1.4 + Math.random() * 0.8
+  });
+}
+
+function addParticles(x, y, color, count = 12) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random()-0.5)*5,
+      vy: (Math.random()-0.5)*5,
+      life: 25 + Math.random()*25,
+      color
+    });
+  }
+}
+
+// ========== 更新 ==========
+function update() {
+  if (!gameRunning || waitingNext || paused) return;
+  frame++;
+
+  if (cheatInvuln > 0) cheatInvuln--;
+  if (cheatFireBoost > 0) cheatFireBoost--;
+
+  // 随机掉落道具（游戏过程中持续随机出现）
+  powerupTimer++;
+  if (powerupTimer > 220 + Math.random() * 200) {
+    powerupTimer = 0;
+    spawnPowerupRandom();
+  }
+
+  player.x += (mouseX - player.x - player.w/2) * 0.18;
+  player.y += (mouseY - player.y - player.h/2) * 0.14;
+  player.x = Math.max(8, Math.min(W - player.w - 8, player.x));
+  player.y = Math.max(H*0.38, Math.min(H - player.h - 15, player.y));
+  if (player.invincible > 0) player.invincible--;
+
+  let fireInterval = 16 - power * 1.5;
+  if (cheatFireBoost > 0) fireInterval = Math.max(4, fireInterval * 0.45);
+  fireInterval = Math.max(5, Math.floor(fireInterval));
+
+  if (frame % fireInterval === 0) {
+    const px = player.x + player.w/2;
+    bullets.push({ x: px - 12, y: player.y - 8, w: 24, h: 32, speed: 7.5, dmg: 1 });
+    if (power >= 2) {
+      bullets.push({ x: px - 32, y: player.y + 6, w: 20, h: 26, speed: 7, dmg: 1 });
+      bullets.push({ x: px + 12, y: player.y + 6, w: 20, h: 26, speed: 7, dmg: 1 });
+    }
+    if (power >= 3) {
+      bullets.push({ x: px - 48, y: player.y + 14, w: 18, h: 22, speed: 6.5, dmg: 1 });
+      bullets.push({ x: px + 30, y: player.y + 14, w: 18, h: 22, speed: 6.5, dmg: 1 });
+    }
+    if (power >= 4) {
+      bullets.push({ x: px - 20, y: player.y - 20, w: 16, h: 20, speed: 8, dmg: 1 });
+      bullets.push({ x: px + 4,  y: player.y - 20, w: 16, h: 20, speed: 8, dmg: 1 });
+    }
+    playSfx(sfxShoot);
+  }
+
+  bullets.forEach(b => b.y -= b.speed);
+  bullets = bullets.filter(b => b.y > -40);
+
+  if (boss) {
+    if (!boss.entered) {
+      boss.y += 2.0;
+      if (boss.y >= 55) { boss.y = 55; boss.entered = true; }
+    } else {
+      boss.x += boss.dir * boss.moveSpeed;
+      if (boss.x < 15 || boss.x > W - boss.w - 15) boss.dir *= -1;
+      boss.phase++;
+
+      if (boss.shootTimer-- <= 0) {
+        boss.shootTimer = boss.baseShoot;
+        const cx = boss.x + boss.w / 2;
+        const cy = boss.y + boss.h - 10;
+        const spd = boss.bulletSpeed;
+
+        for (let i = -boss.spread; i <= boss.spread; i++) {
+          const angle = Math.PI/2 + i * 0.20;
+          eBullets.push({
+            x: cx, y: cy,
+            vx: Math.cos(angle) * spd,
+            vy: Math.sin(angle) * spd,
+            r: 4 + stage
+          });
+        }
+        if (boss.phase % 40 < 15) {
+          eBullets.push({ x: cx - 18, y: cy, vx: -0.5, vy: spd + 0.8, r: 5 });
+          eBullets.push({ x: cx + 18, y: cy, vx:  0.5, vy: spd + 0.8, r: 5 });
+        }
+        if (stage === 3 && boss.phase % 45 < 10) {
+          for (let a = 0; a < Math.PI*2; a += Math.PI/8) {
+            eBullets.push({
+              x: cx, y: cy,
+              vx: Math.cos(a) * 2.8,
+              vy: Math.sin(a) * 2.8,
+              r: 5
+            });
+          }
+        }
+      }
+    }
+  }
+
+  eBullets.forEach(b => { b.x += b.vx; b.y += b.vy; });
+  eBullets = eBullets.filter(b => b.y < H+30 && b.x > -30 && b.x < W+30);
+
+  powerups.forEach(p => p.y += p.speed);
+  powerups = powerups.filter(p => p.y < H+30);
+
+  particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life--; });
+  particles = particles.filter(p => p.life > 0);
+
+  stars.forEach(s => {
+    s.y += s.speed;
+    if (s.y > H) { s.y = 0; s.x = Math.random()*W; }
+  });
+
+  if (boss) {
+    let bossKilled = false;
+    bullets.forEach(b => {
+      if (boss && rectHit(b, boss)) {
+        boss.hp -= b.dmg;
+        b.y = -200;
+        addParticles(b.x + 12, b.y, '#ff0', 4);
+        if (boss.hp <= 0) {
+          bossKilled = true;
+        }
+      }
+    });
+
+    if (bossKilled && boss) {
+      score += boss.score;
+      addParticles(boss.x + boss.w/2, boss.y + boss.h/2, '#f80', 40);
+      playSfx(sfxExplode);
+      const clearedStage = stage;
+      boss = null;
+      waitingNext = true;
+      paused = false;
+      playSfx(sfxClear);
+      document.getElementById('stageClearText').textContent =
+        clearedStage < 3 ? `第 ${clearedStage} 关完成！准备挑战下一关` : '全部关卡通关！恭喜！';
+      document.getElementById('stageClear').classList.remove('hidden');
+      document.getElementById('cheatModal').classList.add('hidden');
+
+      if (clearedStage >= 3) {
+        document.getElementById('endTitle').textContent = '全部通关！';
+        document.getElementById('finalScore').textContent = score;
+        setTimeout(() => {
+          document.getElementById('stageClear').classList.add('hidden');
+          document.getElementById('gameOver').classList.remove('hidden');
+          document.getElementById('cheatBtn').classList.add('hidden');
+          gameRunning = false;
+          bgm.pause();
+        }, 1800);
+      } else {
+        // 2.5秒后自动进入下一关（手机端更可靠）
+        setTimeout(() => {
+          if (waitingNext && stage === clearedStage) {
+            nextStage();
+          }
+        }, 2500);
+      }
+    }
+  }
+  bullets = bullets.filter(b => b.y > -50);
+
+  const isInvuln = player.invincible > 0 || cheatInvuln > 0;
+  if (!isInvuln) {
+    eBullets.forEach(b => {
+      if (dist({x:b.x, y:b.y}, {x:player.x+player.w/2, y:player.y+player.h/2}) < 22) {
+        hitPlayer();
+        b.y = H + 200;
+      }
+    });
+    if (boss && rectHit(player, boss)) hitPlayer();
+  }
+
+  powerups.forEach(p => {
+    if (rectHit(player, p)) {
+      if (p.type === 0) power = Math.min(power + 1, 4);
+      else lives = Math.min(lives + 1, 8);
+      p.y = H + 200;
+      playSfx(sfxPower);
+      addParticles(p.x + 18, p.y + 10, '#0f0', 12);
+    }
+  });
+  powerups = powerups.filter(p => p.y < H);
+
+  document.getElementById('stageNum').textContent = stage;
+  document.getElementById('score').textContent = score;
+  document.getElementById('lives').textContent = lives;
+  document.getElementById('power').textContent = power;
+
+  let status = '';
+  if (cheatInvuln > 0 || cheatFireBoost > 0) {
+    status = `秘籍生效中 ${Math.ceil(Math.max(cheatInvuln, cheatFireBoost)/60)}s`;
+  } else if (usedCheat[stage]) {
+    status = '本关秘籍已使用';
+  }
+  document.getElementById('cheatStatus').textContent = status;
+}
+
+function hitPlayer() {
+  lives--;
+  player.invincible = 90;
+  power = Math.max(1, power - 1);
+  playSfx(sfxHit);
+  addParticles(player.x + player.w/2, player.y + player.h/2, '#f00', 25);
+  if (lives <= 0) {
+    gameRunning = false;
+    bgm.pause();
+    document.getElementById('endTitle').textContent = '任务失败';
+    document.getElementById('finalScore').textContent = score;
+    document.getElementById('gameOver').classList.remove('hidden');
+    document.getElementById('cheatBtn').classList.add('hidden');
+  }
+}
+
+// ========== 绘制 ==========
+function draw() {
+  // 开启高质量图片缩放，保持大小的同时尽量提升清晰度
+  ctx.imageSmoothingEnabled = true;
+  if (ctx.imageSmoothingQuality !== undefined) {
+    ctx.imageSmoothingQuality = 'high';
+  }
+
+  ctx.fillStyle = '#05051a';
+  ctx.fillRect(0, 0, W, H);
+
+  stars.forEach(s => {
+    ctx.fillStyle = `rgba(255,255,255,${0.35 + s.s*0.35})`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.s, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  const isInvuln = player.invincible > 0 || cheatInvuln > 0;
+  if (!isInvuln || frame % 6 < 3) {
+    if (scaledPlayer) {
+      ctx.save();
+      ctx.translate(player.x + player.w/2, player.y + player.h/2);
+      ctx.scale(1, -1); // 图片反过来
+      ctx.drawImage(scaledPlayer, -player.w/2, -player.h/2);
+      ctx.restore();
+    } else if (imgPlayer.complete && imgPlayer.naturalWidth > 0) {
+      ctx.save();
+      ctx.translate(player.x + player.w/2, player.y + player.h/2);
+      ctx.scale(1, -1);
+      ctx.drawImage(imgPlayer, -player.w/2, -player.h/2, player.w, player.h);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#4af';
+      ctx.fillRect(player.x, player.y, player.w, player.h);
+    }
+  }
+
+  if (cheatInvuln > 0) {
+    ctx.strokeStyle = 'rgba(0,255,200,0.6)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(player.x + player.w/2, player.y + player.h/2, 42, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  bullets.forEach(b => {
+    if (scaledBullet) {
+      ctx.drawImage(scaledBullet, b.x, b.y, b.w, b.h);
+    } else if (imgBullet.complete && imgBullet.naturalWidth > 0) {
+      ctx.drawImage(imgBullet, b.x, b.y, b.w, b.h);
+    } else {
+      ctx.fillStyle = '#0ff';
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+    }
+  });
+
+  if (boss) {
+    let bossScaled = null;
+    if (stage === 1) bossScaled = scaledBoss1;
+    else if (stage === 2) bossScaled = scaledBoss2;
+    else if (stage === 3) bossScaled = scaledBoss3;
+
+    if (bossScaled) {
+      ctx.drawImage(bossScaled, boss.x, boss.y);
+    } else if (boss.img.complete && boss.img.naturalWidth > 0) {
+      ctx.drawImage(boss.img, boss.x, boss.y, boss.w, boss.h);
+    } else {
+      ctx.fillStyle = '#f44';
+      ctx.fillRect(boss.x, boss.y, boss.w, boss.h);
+    }
+
+    const ratio = Math.max(0, boss.hp / boss.maxHp);
+    const barW = 160, barX = (W - barW) / 2, barY = 18;
+    ctx.fillStyle = '#222';
+    ctx.fillRect(barX - 2, barY - 2, barW + 4, 14);
+    const r = Math.floor(255 * (1 - ratio));
+    const g = Math.floor(80 * ratio);
+    const bCol = Math.floor(255 * ratio);
+    ctx.fillStyle = `rgb(${r},${g},${bCol})`;
+    ctx.fillRect(barX, barY, barW * ratio, 10);
+    ctx.fillStyle = '#fff';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(boss.name + `  ${Math.ceil(boss.hp)}/${boss.maxHp}`, W/2, barY + 9);
+  }
+
+  eBullets.forEach(b => {
+    ctx.fillStyle = '#f5a';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r * 0.4, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  powerups.forEach(p => {
+    ctx.font = 'bold 16px "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'center';
+    if (p.type === 0) {
+      ctx.fillStyle = '#0ff';
+      ctx.shadowColor = '#0ff';
+      ctx.shadowBlur = 8;
+      ctx.fillText('傻逼', p.x + 18, p.y + 16);
+    } else {
+      ctx.fillStyle = '#0f8';
+      ctx.shadowColor = '#0f8';
+      ctx.shadowBlur = 8;
+      ctx.fillText('白痴', p.x + 18, p.y + 16);
+    }
+    ctx.shadowBlur = 0;
+  });
+
+  particles.forEach(p => {
+    ctx.globalAlpha = p.life / 40;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x, p.y, 3, 3);
+  });
+  ctx.globalAlpha = 1;
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ========== 流程控制 ==========
+function startGame() {
+  score = 0; lives = 5; power = 1;
+  frame = 0; stage = 1;
+  waitingNext = false;
+  paused = false;
+  boss = null;
+  usedCheat = {1: false, 2: false, 3: false};
+  cheatInvuln = 0;
+  cheatFireBoost = 0;
+  keyBuffer = '';
+  powerupTimer = 0;
+  bullets = []; eBullets = []; powerups = []; particles = [];
+  player.x = W/2 - 28; player.y = H - 90; player.invincible = 0;
+
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('gameOver').classList.add('hidden');
+  document.getElementById('stageClear').classList.add('hidden');
+  document.getElementById('ui').classList.remove('hidden');
+  document.getElementById('cheatBtn').classList.remove('hidden');
+  gameRunning = true;
+  spawnBoss(1);
+  try { bgm.currentTime = 0; bgm.play().catch(()=>{}); } catch(e) {}
+}
+
+function nextStage() {
+  // 防止重复调用
+  if (!waitingNext) return;
+  if (stage >= 3) return;
+
+  waitingNext = false;
+  paused = false;
+  stage = stage + 1;
+
+  cheatInvuln = 0;
+  cheatFireBoost = 0;
+  keyBuffer = '';
+
+  // 清理画面元素
+  bullets = [];
+  eBullets = [];
+  powerups = [];
+  particles = [];
+
+  // 隐藏通关界面
+  const clearEl = document.getElementById('stageClear');
+  if (clearEl) clearEl.classList.add('hidden');
+  const modalEl = document.getElementById('cheatModal');
+  if (modalEl) modalEl.classList.add('hidden');
+
+  player.invincible = 90;
+  player.x = W / 2 - player.w / 2;
+  player.y = H - 90;
+
+  // 生成下一关BOSS
+  spawnBoss(stage);
+
+  // 确保UI显示
+  document.getElementById('cheatBtn').classList.remove('hidden');
+  document.getElementById('ui').classList.remove('hidden');
+  document.getElementById('stageNum').textContent = stage;
+}
+
+function acceptDisclaimer() {
+  document.getElementById('disclaimer').classList.add('hidden');
+  document.getElementById('startScreen').classList.remove('hidden');
+}
+
+// ========== 秘籍弹窗 ==========
+function openCheatModal() {
+  if (!gameRunning || waitingNext) return;
+  paused = true;                    // 暂停游戏
+  document.getElementById('cheatModal').classList.remove('hidden');
+  const input = document.getElementById('cheatInput');
+  input.value = '';
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeCheatModal() {
+  document.getElementById('cheatModal').classList.add('hidden');
+  paused = false;                   // 恢复游戏
+}
+
+function submitCheat() {
+  const input = document.getElementById('cheatInput');
+  const code = (input.value || '').trim().toUpperCase();
+  closeCheatModal();
+  if (!code) return;
+  if (code === CHEATS[stage] && !usedCheat[stage]) {
+    usedCheat[stage] = true;
+    cheatInvuln = 3600;
+    cheatFireBoost = 3600;
+    playSfx(sfxCheat);
+    addParticles(player.x + player.w/2, player.y + player.h/2, '#0ff', 35);
+  }
+}
+
+// ========== 预加载 ==========
+function preloadAll() {
+  const images = [imgPlayer, imgBullet, imgBoss1, imgBoss2, imgBoss3, imgCover];
+  const audios = [bgm, sfxShoot, sfxHit, sfxExplode, sfxPower, sfxClear, sfxCheat];
+  let loaded = 0;
+  const total = images.length + audios.length;
+
+  function updateProgress() {
+    loaded++;
+    const pct = Math.min(100, Math.floor((loaded / total) * 100));
+    document.getElementById('loadBar').style.width = pct + '%';
+    if (loaded >= total) {
+      // 图片全部加载完成后，生成最高质量的预缩放版本
+      prepareScaledImages();
+      setTimeout(() => {
+        document.getElementById('loadingScreen').classList.add('hidden');
+        document.getElementById('coverScreen').classList.remove('hidden');
+      }, 350);
+    }
+  }
+
+  images.forEach(img => {
+    if (img.complete && img.naturalWidth > 0) updateProgress();
+    else {
+      img.onload = updateProgress;
+      img.onerror = updateProgress;
+    }
+  });
+
+  audios.forEach(a => {
+    a.addEventListener('canplaythrough', updateProgress, { once: true });
+    a.addEventListener('error', updateProgress, { once: true });
+    a.load();
+  });
+
+  // 超时兜底，防止卡死
+  setTimeout(() => {
+    if (loaded < total) {
+      prepareScaledImages();
+      document.getElementById('loadBar').style.width = '100%';
+      document.getElementById('loadingScreen').classList.add('hidden');
+      document.getElementById('coverScreen').classList.remove('hidden');
+    }
+  }, 15000);
+}
+
+// 封面点击继续 → 免责声明
+document.getElementById('coverScreen').addEventListener('click', () => {
+  document.getElementById('coverScreen').classList.add('hidden');
+  document.getElementById('disclaimer').classList.remove('hidden');
+});
+
+// 启动
+preloadAll();
+loop();
+</script>
+</body>
+</html>
